@@ -69,8 +69,8 @@ sudo -u postgres psql -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WH
 sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/g" /etc/postgresql/*/main/postgresql.conf
 
 # Garantir que as linhas de configuração do PostgreSQL para o IP liberado estejam presentes
-grep -qxF "local   all             odoo                                    md5" /etc/postgresql/*/main/pg_hba.conf || echo "local   all             odoo                                    md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
-grep -qxF "host    all             all             $ALLOWED_IP/32           md5" /etc/postgresql/*/main/pg_hba.conf || echo "host    all             all             $ALLOWED_IP/32           md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+grep -qxF "local   all             odoo                                   md5" /etc/postgresql/*/main/pg_hba.conf || echo "local   all             odoo                                    md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+grep -qxF "host    all             all             $ALLOWED_IP/32         md5" /etc/postgresql/*/main/pg_hba.conf || echo "host    all             all             $ALLOWED_IP/32           md5" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
 
 # Reiniciar o PostgreSQL
 sudo systemctl restart postgresql
@@ -162,6 +162,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now odoo
 
 # Configurar o Nginx para o domínio
+sudo rm /etc/nginx/sites-enabled/$DOMAIN_NAME
+sudo rm /etc/nginx/sites-available/$DOMAIN_NAME
 NGINX_CONFIG_PATH="/etc/nginx/sites-available/$DOMAIN_NAME"
 
 if [ -f "$NGINX_CONFIG_PATH" ]; then
@@ -173,7 +175,18 @@ fi
 sudo bash -c "cat << 'EOF' > $NGINX_CONFIG_PATH
 server {
     listen 80;
-    server_name $DOMAIN_NAME;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+
+    # Redireciona todas as requisições HTTP para HTTPS
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN_NAME www.$DOMAIN_NAME;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:$ODOO_PORT;
@@ -181,31 +194,18 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_redirect off;
     }
 
-    location ~* \.js$ {
-        add_header Content-Type application/javascript;
+    location ~* /web/static/ {
+        proxy_cache_valid 200 90m;
+        proxy_buffering on;
+        expires 864000;
+        proxy_pass http://127.0.0.1:$ODOO_PORT;
     }
 
-    location ~* \.css$ {
-        add_header Content-Type text/css;
-    }
-
-    location ~* \.png$ {
-        add_header Content-Type image/png;
-    }
-
-    location ~* \.jpg$ {
-        add_header Content-Type image/jpeg;
-    }
-
-    location ~* \.jpeg$ {
-        add_header Content-Type image/jpeg;
-    }
-
-    location ~* \.gif$ {
-        add_header Content-Type image/gif;
-    }
+    access_log /var/log/nginx/odoo_access.log;
+    error_log /var/log/nginx/odoo_error.log;
 }
 EOF"
 
