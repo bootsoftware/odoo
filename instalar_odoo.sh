@@ -13,6 +13,8 @@ read -p "Deseja desinstalar o Odoo e todas as dependências antes de instalar no
 
 # Solicitar informações do usuário
 read -p "Digite a versão do Odoo que deseja instalar (exemplo: 18.0): " OE_VERSION
+OE_VERSION=${OE_VERSION:-18.0}
+read -p "Digite o nome do domínio (exemplo: meu_dominio.com): " DOMAIN_NAME
 read -p "Digite o endereço de email para o Certbot/Let's Encrypt: " EMAIL
 read -p "Digite a senha para o usuário PostgreSQL 'odoo': " POSTGRES_PASSWORD
 read -p "Digite a porta para o Odoo (se vazio, usará '8069' como padrão): " ODOO_PORT
